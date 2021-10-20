@@ -12,7 +12,6 @@ from datetime import datetime
 
 from functools import wraps
 from ccxtbt import CCXTStore
-from config import BINANCE, ENV, PRODUCTION, COIN_TARGET, COIN_REFER, DEBUG
 
 from dataset.dataset import CustomDataset
 from sizer.percent import FullMoney
@@ -25,7 +24,6 @@ from ccxt.base.errors import NetworkError, ExchangeError
 
 
 class CCXTStoreFutures(ccxtbt.CCXTStore):
-
     def __init__(self, exchange, currency, config, retries, debug=False, sandbox=False):
         super().__init__(exchange, currency, config, retries, debug, sandbox)
         self.exchange = getattr(ccxt, exchange)(config)
@@ -77,16 +75,17 @@ class CCXTStoreFutures(ccxtbt.CCXTStore):
     def fetch_ohlcv(self, symbol, timeframe, since, limit, params={}):
         if self.debug:
             print('Fetching: {}, TF: {}, Since: {}, Limit: {}'.format(symbol, timeframe, since, limit))
-        return self.exchange.fetch_ohlcv(symbol, timeframe=timeframe, since=since, limit=limit, params=params)
+        # latest_price = exchange.fapiPublic_get_ticker_price({"symbol": f"{symbol}"})['price']
+        return self.exchange.fapiPublicGetKlines(symbol, timeframe=timeframe, since=since, limit=limit, params=params)
 
     def fetch_order(self, oid, symbol):
-        return self.exchange.fetch_order(oid, symbol)
+        return self.exchange.fapiPrivateGetOrder(oid, symbol)
 
     def fetch_open_orders(self, symbol=None):
         if symbol is None:
-            return self.exchange.fetchOpenOrders()
+            return self.exchange.fapiPrivateGetOpenOrders()
         else:
-            return self.exchange.fetchOpenOrders(symbol)
+            return self.exchange.fapiPrivateGetOpenOrders(symbol)
 
 
 def main():
@@ -130,14 +129,14 @@ def main():
         broker = store.getbroker(broker_mapping=broker_mapping)
         cerebro.setbroker(broker)
 
-        hist_start_date = dt.datetime.utcnow() - dt.timedelta(minutes=30000)
+        hist_start_date = dt.datetime.utcnow() - dt.timedelta(minutes=window)
         data = store.getdata(
             dataname='%s/%s' % (COIN_TARGET, COIN_REFER),
             name='%s%s' % (COIN_TARGET, COIN_REFER),
             timeframe=bt.TimeFrame.Minutes,
             fromdate=hist_start_date,
-            compression=30,
-            ohlcv_limit=99999
+            compression=5,
+            ohlcv_limit=9999
         )
 
         # Add the feed

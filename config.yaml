@@ -1,0 +1,51 @@
+production: production
+development: development
+
+binance:
+  apiKey: pW69XGpCLczcVTeIEBwrTO3z8kYhcyKoi2iSffaQ8BuIz1QP0JEqU2S9ZrLZ8aXk
+  secret: LrvI4zkVFX64sI0NOc9hpnL28Qtn4Qu4NBlukZnxgdPfF3y6i4pksgL4Biyv9T57
+strategy_symbol_time_period_leverage: 2
+strategy_symbol_time_period_reduceRate: 0.3
+strategy_symbol_time_period_list:
+- time_period
+strategy_symbol_list:
+- SYMBOL
+strategy_list:
+- SampleStrategy
+binance_order_types:
+  close_long:
+    position_side: LONG
+    side: SELL
+  close_short:
+    position_side: SHORT
+    side: BUY
+  open_long:
+    position_side: LONG
+    side: BUY
+  open_short:
+    position_side: SHORT
+    side: SELL
+  reduce_long:
+    position_side: LONG
+    side: SELL
+  reduce_SHORT:
+    position_side: SHORT
+    side: BUY
+default_leverage: 1.5
+default_reduce_rate: 0.3
+test_info:
+  period_LONG_position: 0.000
+  period_SHORT_position: 0.000
+  period_allocated_funds: 0.000
+  period_allocated_ratio: 0.000
+  schedule_action: join
+  symbol: insert_symbol
+  time_period: insert_time_period
+times:
+  long_sleep_time: 6
+  medium_sleep_time: 2
+  short_sleep_time: 1
+
+telegram:
+  channel: chanel id
+  bot: bot key
