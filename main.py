@@ -1,11 +1,16 @@
 #!/usr/bin/env python3
+from __future__ import (absolute_import, division, print_function,
+                        unicode_literals)
 
 import time
 import backtrader as bt
 import datetime as dt
 import ccxtbt
 import ccxt
+import time
+from datetime import datetime
 
+from functools import wraps
 from ccxtbt import CCXTStore
 from config import BINANCE, ENV, PRODUCTION, COIN_TARGET, COIN_REFER, DEBUG
 
@@ -14,16 +19,22 @@ from sizer.percent import FullMoney
 from strategies.basic_rsi import BasicRSI
 from utils import print_trade_analysis, print_sqn, send_telegram_message
 
+from backtrader.metabase import MetaParams
+from backtrader.utils.py3 import with_metaclass
+from ccxt.base.errors import NetworkError, ExchangeError
+
 
 class CCXTStoreFutures(ccxtbt.CCXTStore):
+
     def __init__(self, exchange, currency, config, retries, debug=False, sandbox=False):
+        super().__init__(exchange, currency, config, retries, debug, sandbox)
         self.exchange = getattr(ccxt, exchange)(config)
         if sandbox:
             self.exchange.set_sandbox_mode(True)
         self.currency = currency
         self.retries = retries
         self.debug = debug
-        balance = self.exchange.fetch_balance() if 'secret' in config else 0
+        balance = self.exchange.fapiPrivateV2GetBalance() if 'secret' in config else 0
         try:
             if balance == 0 or not balance['free'][currency]:
                 self._cash = 0
@@ -39,38 +50,82 @@ class CCXTStoreFutures(ccxtbt.CCXTStore):
         except KeyError:
             self._value = 0
 
+    def get_wallet_balance(self, currency, params=None):
+        balance = self.exchange.fapiPrivateV2GetBalance(params)
+        return balance
+
+    def get_balance(self):
+        balance = self.exchange.fapiPrivateV2GetBalance()
+
+        cash = balance['free'][self.currency]
+        value = balance['total'][self.currency]
+        # Fix if None is returned
+        self._cash = cash if cash else 0
+        self._value = value if value else 0
+
+    def create_order(self, symbol, order_type, side, amount, price, params):
+        # returns the order
+        return self.exchange.fapiPrivatePostOrder(symbol=symbol, type=order_type, side=side,
+                                          amount=amount, price=price, params=params)
+
+    def cancel_order(self, order_id, symbol):
+        return self.exchange.fapiPrivateDeleteOrder(order_id, symbol)
+
+    def fetch_trades(self, symbol):
+        return self.exchange.fapiPrivateGetUserTrades(symbol)
+
+    def fetch_ohlcv(self, symbol, timeframe, since, limit, params={}):
+        if self.debug:
+            print('Fetching: {}, TF: {}, Since: {}, Limit: {}'.format(symbol, timeframe, since, limit))
+        return self.exchange.fetch_ohlcv(symbol, timeframe=timeframe, since=since, limit=limit, params=params)
+
+    def fetch_order(self, oid, symbol):
+        return self.exchange.fetch_order(oid, symbol)
+
+    def fetch_open_orders(self, symbol=None):
+        if symbol is None:
+            return self.exchange.fetchOpenOrders()
+        else:
+            return self.exchange.fetchOpenOrders(symbol)
+
 
 def main():
     cerebro = bt.Cerebro(quicknotify=True)
-
+    ccxtbt.CCXTStore = CCXTStoreFutures
     if ENV == PRODUCTION:  # Live trading with Binance
-        broker_config = {
-            'apiKey': BINANCE.get("key"),
-            'secret': BINANCE.get("secret"),
-            'nonce': lambda: str(int(time.time() * 1000)),
-            'enableRateLimit': True,
-        }
+        broker_config = \
+            {
+                'apiKey': BINANCE.get("key"),
+                'secret': BINANCE.get("secret"),
+                'nonce': lambda: str(int(time.time() * 1000)),
+                'enableRateLimit': True,
+                'hostname': 'fapi.binance.com',
+                'rateLimit': 10,
+                'timeout': 5000,
+                'verbose': 'false'
+            }
 
-        store = CCXTStore(exchange='binance', currency=COIN_REFER, config=broker_config, retries=5, debug=DEBUG)
+        store = CCXTStore(exchange='binance', currency=COIN_REFER, config=broker_config, retries=10, debug=DEBUG)
 
-        broker_mapping = {
-            'order_types': {
-                bt.Order.Market: 'market',
-                bt.Order.Limit: 'limit',
-                bt.Order.Stop: 'stop-loss',
-                bt.Order.StopLimit: 'stop limit'
-            },
-            'mappings': {
-                'closed_order': {
-                    'key': 'status',
-                    'value': 'closed'
+        broker_mapping = \
+            {
+                'order_types': {
+                    bt.Order.Market: 'market',
+                    bt.Order.Limit: 'limit',
+                    bt.Order.Stop: 'stop-loss',
+                    bt.Order.StopLimit: 'stop limit'
                 },
-                'canceled_order': {
-                    'key': 'status',
-                    'value': 'canceled'
+                'mappings': {
+                    'closed_order': {
+                        'key': 'status',
+                        'value': 'closed'
+                    },
+                    'canceled_order': {
+                        'key': 'status',
+                        'value': 'canceled'
+                    }
                 }
             }
-        }
 
         broker = store.getbroker(broker_mapping=broker_mapping)
         cerebro.setbroker(broker)
