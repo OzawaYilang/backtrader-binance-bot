@@ -3,6 +3,8 @@
 import time
 import backtrader as bt
 import datetime as dt
+import ccxtbt
+import ccxt
 
 from ccxtbt import CCXTStore
 from config import BINANCE, ENV, PRODUCTION, COIN_TARGET, COIN_REFER, DEBUG
@@ -11,6 +13,31 @@ from dataset.dataset import CustomDataset
 from sizer.percent import FullMoney
 from strategies.basic_rsi import BasicRSI
 from utils import print_trade_analysis, print_sqn, send_telegram_message
+
+
+class CCXTStoreFutures(ccxtbt.CCXTStore):
+    def __init__(self, exchange, currency, config, retries, debug=False, sandbox=False):
+        self.exchange = getattr(ccxt, exchange)(config)
+        if sandbox:
+            self.exchange.set_sandbox_mode(True)
+        self.currency = currency
+        self.retries = retries
+        self.debug = debug
+        balance = self.exchange.fetch_balance() if 'secret' in config else 0
+        try:
+            if balance == 0 or not balance['free'][currency]:
+                self._cash = 0
+            else:
+                self._cash = balance['free'][currency]
+        except KeyError:  # never funded or eg. all USD exchanged
+            self._cash = 0
+        try:
+            if balance == 0 or not balance['total'][currency]:
+                self._value = 0
+            else:
+                self._value = balance['total'][currency]
+        except KeyError:
+            self._value = 0
 
 
 def main():
